@@ -3,129 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>店舗連絡先QRメーカー</title>
-    <!-- QRコード生成用の軽量ライブラリを読み込み -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <title>最寄り店舗の連絡先登録</title>
     <style>
-        body {
-            font-family: sans-serif;
-            background-color: #f4f7f6;
-            padding: 20px;
-        }
-        .container {
-            max-width: 500px;
-            margin: 0 auto;
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        h2 { text-align: center; color: #333; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
-        input {
-            width: 100%;
-            padding: 10px;
-            box-sizing: border-box;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: #0056b3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-            cursor: pointer;
-            font-weight: bold;
-        }
+        body { font-family: sans-serif; background-color: #f4f7f6; padding: 20px; text-align: center; color: #333; }
+        .container { max-width: 400px; margin: 0 auto; background: #fff; padding: 30px 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        button { background-color: #0056b3; color: white; border: none; padding: 15px 20px; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 20px; }
         button:hover { background-color: #004494; }
-        #qrcode-container {
-            margin-top: 25px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        #qrcode { margin-bottom: 10px; }
-        .note {
-            text-align: center;
-            font-size: 0.85em;
-            color: #d9534f;
-            font-weight: bold;
-        }
+        #result { margin-top: 25px; display: none; }
+        .store-info { background: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 20px; text-align: left; }
+        .store-info h3 { margin-top: 0; color: #0056b3; }
+        .store-info p { margin: 5px 0; font-size: 14px; }
+        .error { color: #d9534f; font-weight: bold; margin-top: 20px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h2>店舗連絡先QRメーカー</h2>
-        
-        <div class="form-group">
-            <label for="storeName">店舗名（必須）</label>
-            <input type="text" id="storeName" placeholder="例: モバイルショップ 〇〇店">
-        </div>
+<div class="container">
+    <h2>店舗連絡先カンタン登録</h2>
+    <p>現在地から最寄りの店舗を探して<br>スマートフォンに登録します。</p>
+    
+    <button id="getLocationBtn" onclick="findNearestStore()">現在地から最寄り店舗を探す</button>
+    <div id="statusMessage" class="error"></div>
 
-        <div class="form-group">
-            <label for="phoneNumber">電話番号（必須）</label>
-            <input type="tel" id="phoneNumber" placeholder="例: 03-1234-5678">
+    <div id="result">
+        <div class="store-info">
+            <h3 id="storeName">店舗名</h3>
+            <p><strong>電話:</strong> <span id="storePhone"></span></p>
+            <p><strong>住所:</strong> <span id="storeAddress"></span></p>
+            <p style="font-size: 12px; color: #666; margin-top: 10px;">現在地からの距離: 約 <span id="storeDistance"></span> km</p>
         </div>
-
-        <div class="form-group">
-            <label for="address">住所</label>
-            <input type="text" id="address" placeholder="例: 埼玉県〇〇市〇〇1-2-3">
-        </div>
-
-        <button onclick="generateQR()">QRコードを生成</button>
-
-        <div id="qrcode-container">
-            <div id="qrcode"></div>
-            <p class="note" id="instruction" style="display:none;">
-                ※生成されたQRコードを右クリック（スマホなら長押し）して<br>「画像として保存」し、POP素材としてご活用ください。
-            </p>
-        </div>
+        <!-- vCardダウンロード用ボタン -->
+        <button id="downloadBtn" style="background-color: #28a745;">連絡先に登録する</button>
     </div>
+</div>
 
-    <script>
-        function generateQR() {
-            const name = document.getElementById('storeName').value.trim();
-            const phone = document.getElementById('phoneNumber').value.trim();
-            const address = document.getElementById('address').value.trim();
+<script>
+    // 店舗リストの定義（緯度・経度を設定）
+    const stores = [
+        { name: "大宮店", phone: "048-000-0001", address: "埼玉県さいたま市大宮区〇〇1-1", lat: 35.9063, lon: 139.6253 },
+        { name: "浦和店", phone: "048-000-0002", address: "埼玉県さいたま市浦和区〇〇2-2", lat: 35.8589, lon: 139.6573 },
+        { name: "川口店", phone: "048-000-0003", address: "埼玉県川口市〇〇3-3", lat: 35.8019, lon: 139.7173 }
+    ];
 
-            if (!name || !phone) {
-                alert("店舗名と電話番号は入力必須です。");
-                return;
-            }
+    function findNearestStore() {
+        const status = document.getElementById('statusMessage');
+        const btn = document.getElementById('getLocationBtn');
+        
+        status.textContent = "位置情報を取得しています...";
+        btn.disabled = true;
 
-            // iOS/Android共通で読み取れるvCard 3.0形式の文字列を構築
-            // N: 名前, TEL: 電話番号, ADR: 住所
-            const vcardData = 
+        if (!navigator.geolocation) {
+            status.textContent = "お使いのブラウザは位置情報に対応していません。";
+            btn.disabled = false;
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                status.textContent = "";
+                const userLat = position.coords.latitude;
+                const userLon = position.coords.longitude;
+                
+                let nearestStore = null;
+                let minDistance = Infinity;
+
+                // 各店舗との距離を計算
+                stores.forEach(store => {
+                    const distance = getDistanceFromLatLonInKm(userLat, userLon, store.lat, store.lon);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestStore = store;
+                    }
+                });
+
+                showResult(nearestStore, minDistance);
+            },
+            (error) => {
+                status.textContent = "位置情報の取得が許可されませんでした。ブラウザの設定をご確認ください。";
+                btn.disabled = false;
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    }
+
+    // 2点間の緯度経度から距離（km）を計算する関数（ハバサイン公式）
+    function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+        const R = 6371; // 地球の半径 (km)
+        const dLat = deg2rad(lat2 - lat1);
+        const dLon = deg2rad(lon2 - lon1);
+        const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2); 
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+        return R * c;
+    }
+
+    function deg2rad(deg) {
+        return deg * (Math.PI/180);
+    }
+
+    function showResult(store, distance) {
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('getLocationBtn').style.display = 'none';
+
+        document.getElementById('storeName').textContent = store.name;
+        document.getElementById('storePhone').textContent = store.phone;
+        document.getElementById('storeAddress').textContent = store.address;
+        document.getElementById('storeDistance').textContent = distance.toFixed(1);
+
+        // vCard生成処理をボタンに紐付け
+        const downloadBtn = document.getElementById('downloadBtn');
+        downloadBtn.onclick = () => downloadVCard(store);
+    }
+
+    function downloadVCard(store) {
+        const vcardData = 
 `BEGIN:VCARD
 VERSION:3.0
-N:${name}
-TEL;TYPE=WORK,VOICE:${phone}
-ADR;TYPE=WORK:;;${address};;;;
+N:${store.name}
+TEL;TYPE=WORK,VOICE:${store.phone}
+ADR;TYPE=WORK:;;${store.address};;;;
 END:VCARD`;
 
-            // 既存のQRコードをクリア
-            const qrElement = document.getElementById('qrcode');
-            qrElement.innerHTML = "";
-
-            // QRコードを生成（エラー訂正レベルMで少し複雑なデータにも対応）
-            new QRCode(qrElement, {
-                text: vcardData,
-                width: 200,
-                height: 200,
-                colorDark : "#000000",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.M
-            });
-
-            // 保存案内のテキストを表示
-            document.getElementById('instruction').style.display = "block";
-        }
-    </script>
+        // Blobオブジェクトを使用して仮想的なファイルを作成し、ダウンロードさせる
+        const blob = new Blob([vcardData], { type: "text/vcard" });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `${store.name}_連絡先.vcf`;
+        
+        document.body.appendChild(a);
+        a.click();
+        
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+</script>
 
 </body>
 </html>
